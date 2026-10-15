@@ -1,67 +1,41 @@
-# Telecom Customer Churn — Data Preprocessing & EDA
+# Week 2: Telecom Customer Churn — Data Cleaning, EDA and Visualization
 
-A Python project for the Yuva Intern Week 1 task: **Data Preprocessing and Exploratory Data Analysis in Telecom**.
-
-## Project overview
-This project explores the IBM Telco Customer Churn sample dataset (7,043 customer records) to inspect data quality, clean data, analyze customer churn, and generate visual summaries.
-
-### Tools and libraries
-- Python 3.9+
-- pandas — loading, cleaning, and summarizing tabular data
-- NumPy — numerical operations
-- Matplotlib and Seaborn — charts and visual analysis
+## Objective
+Clean and explore the public IBM Telco Customer Churn sample dataset using Python. This project checks data quality, summarizes customer information, and creates charts to explore churn patterns.
 
 ## Dataset
-Use the publicly available **IBM Telco Customer Churn** sample dataset. One commonly used source is Kaggle:
-https://www.kaggle.com/datasets/blastchar/telco-customer-churn
+- File: `WA_Fn-UseC_-Telco-Customer-Churn.csv`
+- Expected size: 7,043 customer records and 21 columns
+- Target: `Churn` (Yes/No)
+- Public source: IBM sample dataset. The script downloads it automatically if the CSV is missing and internet access is available.
 
-Download `WA_Fn-UseC_-Telco-Customer-Churn.csv` and place it inside the `data/` folder. The dataset is not included in this repository.
+## Files
+- `main.py` — complete analysis script
+- `requirements.txt` — required Python libraries
+- `data/` — put the CSV here; auto-download is attempted if missing
+- `outputs/` — created when the script runs; contains cleaned CSV, audit notes, summaries, tables and PNG charts
+- `Telecom_Week2_Advanced_Analysis_Report.docx` — report template/methodology
 
-Expected path:
+## Run on Windows
+1. Install Python and open Command Prompt or Anaconda Prompt.
+2. Change directory to this project folder.
+3. Run: `python -m pip install -r requirements.txt`
+4. Run: `python main.py`
+5. Open the `outputs` folder to view the results and charts.
+
+If the automatic download fails, download the CSV from the IBM repository and save it as:
 `data/WA_Fn-UseC_-Telco-Customer-Churn.csv`
 
-## Setup and run
+## Main analysis
+1. Dataset shape and preview
+2. Data types and missing-value audit
+3. Numeric conversion of `TotalCharges`
+4. Duplicate check and missing-value handling
+5. Descriptive statistics
+6. Churn distribution
+7. Churn by contract, internet service, payment method and technical support
+8. Tenure and monthly-charge comparisons
+9. Numeric correlation heatmap
 
-1. Install Python 3.9 or newer.
-2. Open a terminal in the project folder.
-3. Install dependencies:
-
-   ```bash
-   pip install -r requirements.txt
-   ```
-
-4. The script automatically tries to download the CSV into `data/` on first run. If your network blocks automatic download, download it from the Kaggle link above and save it as `data/WA_Fn-UseC_-Telco-Customer-Churn.csv`.
-5. Run:
-
-   ```bash
-   python main.py
-   ```
-
-The script prints dataset summaries and saves charts in the `outputs/` folder.
-
-## Workflow
-1. Load the CSV with Pandas.
-2. Inspect shape, columns, data types, summary statistics, missing values, and duplicates.
-3. Convert `TotalCharges` to numeric, handling blank strings as missing values.
-4. Remove duplicate rows if any are present.
-5. Fill missing `TotalCharges` values using `MonthlyCharges` for zero-tenure customers when appropriate; otherwise use the median.
-6. Analyze churn by contract, internet service, payment method, tenure, and monthly charges.
-7. Detect potential outliers in `MonthlyCharges` using the IQR method.
-8. Save visualizations and a cleaned CSV.
-
-## Output files
-The script creates:
-- `outputs/churn_distribution.png`
-- `outputs/churn_by_contract.png`
-- `outputs/churn_by_internet_service.png`
-- `outputs/monthly_charges_by_churn.png`
-- `outputs/tenure_distribution.png`
-- `outputs/cleaned_telco_data.csv`
-
-## Important notes
-- This is exploratory analysis, not a causal study. Associations do not prove that a feature causes churn.
-- The script expects the original IBM sample dataset columns.
-- Do not upload private or personally identifiable customer data.
-
-## Suggested repository description
-`Python project for cleaning and exploratory analysis of the IBM Telco Customer Churn dataset using Pandas, NumPy, Matplotlib, and Seaborn.`
+## Interpretation note
+This is exploratory analysis, not a production decision system. Relationships in the charts show association, not proof of cause. Run the script on the dataset before quoting any calculated output values in your final submission.

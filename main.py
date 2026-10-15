@@ -1,215 +1,177 @@
-"""Telecom Customer Churn: preprocessing and exploratory data analysis."""
-
+"""
+Week 2 - Telecom Customer Churn: Data Cleaning, EDA and Visualization
+Run: python main.py
+Dataset expected at data/WA_Fn-UseC_-Telco-Customer-Churn.csv
+If missing, the script attempts to download the public IBM sample dataset.
+"""
 from pathlib import Path
-import sys
 import urllib.request
-
-import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
-import seaborn as sns
 
 ROOT = Path(__file__).resolve().parent
-DATA_PATH = ROOT / "data" / "WA_Fn-UseC_-Telco-Customer-Churn.csv"
-OUTPUT_DIR = ROOT / "outputs"
-OUTPUT_DIR.mkdir(exist_ok=True)
-DATA_URLS = [
-    "https://raw.githubusercontent.com/Varijoo/telecom-churn-analysis/main/WA_Fn-UseC_-Telco-Customer-Churn.csv",
-    "https://raw.githubusercontent.com/abdrahmansoltan/Telco-Customer-Churn/main/WA_Fn-UseC_-Telco-Customer-Churn.csv",
-]
+DATA_DIR = ROOT / "data"
+OUT_DIR = ROOT / "outputs"
+DATA_DIR.mkdir(exist_ok=True)
+OUT_DIR.mkdir(exist_ok=True)
 
-sns.set_theme(style="whitegrid")
+DATA_FILE = DATA_DIR / "WA_Fn-UseC_-Telco-Customer-Churn.csv"
+DATA_URL = "https://raw.githubusercontent.com/IBM/telco-customer-churn-on-icp4d/master/data/Telco-Customer-Churn.csv"
 
-
-def load_data(path: Path) -> pd.DataFrame:
-    """Load the dataset and report a helpful message if it is missing."""
-    if not path.exists():
-        path.parent.mkdir(parents=True, exist_ok=True)
-        last_error = None
-        for url in DATA_URLS:
-            try:
-                print(f"Dataset not found locally. Trying download from: {url}")
-                request = urllib.request.Request(url, headers={"User-Agent": "Mozilla/5.0"})
-                with urllib.request.urlopen(request, timeout=30) as response:
-                    content = response.read()
-                if not content.startswith(b"customerID,"):
-                    raise ValueError("Downloaded file does not look like the expected CSV dataset.")
-                path.write_bytes(content)
-                print(f"Dataset downloaded to: {path}")
-                break
-            except Exception as exc:
-                last_error = exc
-        if not path.exists():
-            raise FileNotFoundError(
-                f"Dataset not found and automatic download failed.\n"
-                f"Save WA_Fn-UseC_-Telco-Customer-Churn.csv to: {path}\n"
-                f"Download it from the Kaggle source in README.md.\n"
-                f"Last download error: {last_error}"
+def load_data():
+    if not DATA_FILE.exists():
+        print("Dataset not found. Downloading public IBM Telco sample...")
+        try:
+            urllib.request.urlretrieve(DATA_URL, DATA_FILE)
+        except Exception as exc:
+            raise SystemExit(
+                "Could not download the dataset. Download the IBM Telco Customer Churn CSV "
+                "and save it as: " + str(DATA_FILE) + f"\nReason: {exc}"
             )
-    return pd.read_csv(path)
+    df = pd.read_csv(DATA_FILE)
+    # Accept either common filename/content version.
+    return df
 
+def main():
+    df = load_data()
+    print("\\n=== TELECOM CUSTOMER CHURN: WEEK 2 EDA ===")
+    print("Dataset shape:", df.shape)
+    print("\\nFirst five rows:")
+    print(df.head().to_string(index=False))
+    print("\\nColumn data types before cleaning:")
+    print(df.dtypes.to_string())
 
-def clean_data(df: pd.DataFrame) -> pd.DataFrame:
-    """Clean common issues in the IBM Telco Customer Churn dataset."""
-    data = df.copy()
-    data.columns = data.columns.str.strip()
+    # Standardize whitespace and convert TotalCharges to numeric.
+    df.columns = df.columns.str.strip()
+    for col in df.select_dtypes(include="object").columns:
+        df[col] = df[col].map(lambda x: x.strip() if isinstance(x, str) else x)
+    if "TotalCharges" in df.columns:
+        df["TotalCharges"] = pd.to_numeric(df["TotalCharges"], errors="coerce")
 
-    # The original file can contain blank strings in TotalCharges.
-    if "TotalCharges" in data.columns:
-        data["TotalCharges"] = pd.to_numeric(
-            data["TotalCharges"].replace(r"^\s*$", np.nan, regex=True),
-            errors="coerce",
-        )
+    # Audit and clean.
+    duplicate_rows = int(df.duplicated().sum())
+    missing_before = df.isna().sum()
+    if "TotalCharges" in df.columns and "tenure" in df.columns:
+        # Blank TotalCharges commonly belongs to new customers with tenure 0.
+        df.loc[df["TotalCharges"].isna() & (df["tenure"] == 0), "TotalCharges"] = 0
+    # Any remaining numeric missing values use median; categorical use mode.
+    for col in df.select_dtypes(include="number").columns:
+        if df[col].isna().any():
+            df[col] = df[col].fillna(df[col].median())
+    for col in df.select_dtypes(include="object").columns:
+        if df[col].isna().any():
+            mode = df[col].mode(dropna=True)
+            df[col] = df[col].fillna(mode.iloc[0] if not mode.empty else "Unknown")
 
-    before = len(data)
-    data = data.drop_duplicates()
-    print(f"Duplicate rows removed: {before - len(data)}")
+    # Avoid double-counting exact duplicate rows.
+    df = df.drop_duplicates().copy()
 
-    if "TotalCharges" in data.columns and "MonthlyCharges" in data.columns:
-        # Zero-tenure customers often have blank TotalCharges in the source data.
-        zero_tenure = (
-            data["tenure"].eq(0)
-            if "tenure" in data.columns
-            else pd.Series(False, index=data.index)
-        )
-        data.loc[
-            data["TotalCharges"].isna() & zero_tenure, "TotalCharges"
-        ] = 0
+    # Save data audit and cleaned data.
+    audit = [
+        f"Rows after cleaning: {df.shape[0]}",
+        f"Columns: {df.shape[1]}",
+        f"Duplicate rows found before cleaning: {duplicate_rows}",
+        "",
+        "Missing values before cleaning:",
+        missing_before.to_string(),
+        "",
+        "Missing values after cleaning:",
+        df.isna().sum().to_string(),
+    ]
+    (OUT_DIR / "data_audit.txt").write_text("\\n".join(audit), encoding="utf-8")
+    df.to_csv(OUT_DIR / "cleaned_telecom_data.csv", index=False)
 
-        remaining_missing = data["TotalCharges"].isna()
-        if remaining_missing.any():
-            median_total = data["TotalCharges"].median()
-            data.loc[remaining_missing, "TotalCharges"] = median_total
+    print("\\nDuplicate rows found:", duplicate_rows)
+    print("\\nMissing values before cleaning:")
+    print(missing_before[missing_before > 0].to_string() if (missing_before > 0).any() else "None")
+    print("\\nMissing values after cleaning:", int(df.isna().sum().sum()))
 
-    return data
+    # Numeric descriptive statistics.
+    numeric = df.select_dtypes(include="number")
+    numeric.describe().to_csv(OUT_DIR / "numeric_summary.csv")
+    print("\\nNumeric summary:")
+    print(numeric.describe().round(2).to_string())
 
+    if "Churn" not in df.columns:
+        raise SystemExit("The dataset does not contain the required 'Churn' column.")
 
-def save_plot(filename: str) -> None:
-    plt.tight_layout()
-    plt.savefig(OUTPUT_DIR / filename, dpi=160, bbox_inches="tight")
-    plt.close()
-    print(f"Saved chart: outputs/{filename}")
-
-
-def make_visualizations(df: pd.DataFrame) -> None:
-    """Generate charts used in the exploratory analysis."""
     # 1. Overall churn distribution
-    if "Churn" in df.columns:
-        plt.figure(figsize=(7, 5))
-        sns.countplot(data=df, x="Churn", color="steelblue")
-        plt.title("Customer Churn Distribution")
-        plt.xlabel("Churn")
-        plt.ylabel("Number of Customers")
-        save_plot("churn_distribution.png")
+    churn_counts = df["Churn"].value_counts().reindex(["No", "Yes"]).fillna(0)
+    churn_counts.to_csv(OUT_DIR / "churn_counts.csv", header=["customers"])
+    plt.figure(figsize=(6, 4))
+    churn_counts.plot(kind="bar")
+    plt.title("Telecom Customer Churn Distribution")
+    plt.xlabel("Churn")
+    plt.ylabel("Number of customers")
+    plt.xticks(rotation=0)
+    plt.tight_layout()
+    plt.savefig(OUT_DIR / "01_churn_distribution.png", dpi=160)
+    plt.close()
 
-    # 2. Churn rate by contract
-    if {"Contract", "Churn"}.issubset(df.columns):
-        contract_rate = (
-            df.assign(ChurnFlag=df["Churn"].map({"Yes": 1, "No": 0}))
-            .groupby("Contract", dropna=False)["ChurnFlag"]
-            .mean()
-            .mul(100)
-            .reset_index(name="ChurnRate")
-        )
-        plt.figure(figsize=(8, 5))
-        sns.barplot(data=contract_rate, x="Contract", y="ChurnRate", color="steelblue")
-        plt.title("Churn Rate by Contract Type")
-        plt.xlabel("Contract Type")
-        plt.ylabel("Churn Rate (%)")
-        plt.xticks(rotation=15)
-        save_plot("churn_by_contract.png")
+    # 2. Churn percentage by contract type
+    if "Contract" in df.columns:
+        contract_rate = pd.crosstab(df["Contract"], df["Churn"], normalize="index") * 100
+        contract_rate.to_csv(OUT_DIR / "churn_by_contract_percent.csv")
+        ax = contract_rate.reindex(columns=["No", "Yes"]).plot(kind="bar", figsize=(8, 5))
+        ax.set_title("Churn Percentage by Contract Type")
+        ax.set_xlabel("Contract type")
+        ax.set_ylabel("Percentage (%)")
+        plt.xticks(rotation=0)
+        plt.tight_layout()
+        plt.savefig(OUT_DIR / "02_churn_by_contract.png", dpi=160)
+        plt.close()
 
-    # 3. Churn rate by internet service
-    if {"InternetService", "Churn"}.issubset(df.columns):
-        internet_rate = (
-            df.assign(ChurnFlag=df["Churn"].map({"Yes": 1, "No": 0}))
-            .groupby("InternetService", dropna=False)["ChurnFlag"]
-            .mean()
-            .mul(100)
-            .reset_index(name="ChurnRate")
-        )
-        plt.figure(figsize=(8, 5))
-        sns.barplot(data=internet_rate, x="InternetService", y="ChurnRate", color="steelblue")
-        plt.title("Churn Rate by Internet Service")
-        plt.xlabel("Internet Service")
-        plt.ylabel("Churn Rate (%)")
-        save_plot("churn_by_internet_service.png")
-
-    # 4. Monthly charges by churn status
-    if {"MonthlyCharges", "Churn"}.issubset(df.columns):
-        plt.figure(figsize=(8, 5))
-        sns.boxplot(data=df, x="Churn", y="MonthlyCharges", color="steelblue")
-        plt.title("Monthly Charges by Churn Status")
-        plt.xlabel("Churn")
-        plt.ylabel("Monthly Charges")
-        save_plot("monthly_charges_by_churn.png")
-
-    # 5. Tenure distribution
+    # 3. Tenure distribution by churn
     if "tenure" in df.columns:
-        plt.figure(figsize=(8, 5))
-        sns.histplot(data=df, x="tenure", bins=30, kde=True, color="steelblue")
-        plt.title("Customer Tenure Distribution")
-        plt.xlabel("Tenure (months)")
-        plt.ylabel("Number of Customers")
-        save_plot("tenure_distribution.png")
+        groups = [df.loc[df["Churn"] == label, "tenure"].dropna() for label in ["No", "Yes"]]
+        plt.figure(figsize=(7, 4))
+        plt.boxplot(groups, tick_labels=["No churn", "Churn"])
+        plt.title("Customer Tenure by Churn Status")
+        plt.xlabel("Churn status")
+        plt.ylabel("Tenure (months)")
+        plt.tight_layout()
+        plt.savefig(OUT_DIR / "03_tenure_by_churn.png", dpi=160)
+        plt.close()
 
+    # 4. Monthly charges by churn
+    if "MonthlyCharges" in df.columns:
+        groups = [df.loc[df["Churn"] == label, "MonthlyCharges"].dropna() for label in ["No", "Yes"]]
+        plt.figure(figsize=(7, 4))
+        plt.boxplot(groups, tick_labels=["No churn", "Churn"])
+        plt.title("Monthly Charges by Churn Status")
+        plt.xlabel("Churn status")
+        plt.ylabel("Monthly charges")
+        plt.tight_layout()
+        plt.savefig(OUT_DIR / "04_monthly_charges_by_churn.png", dpi=160)
+        plt.close()
 
-def report_quality(df: pd.DataFrame) -> None:
-    print("\n--- DATASET OVERVIEW ---")
-    print(f"Rows: {df.shape[0]:,}")
-    print(f"Columns: {df.shape[1]:,}")
-    print("\n--- DATA TYPES ---")
-    print(df.dtypes)
-    print("\n--- MISSING VALUES ---")
-    print(df.isna().sum().sort_values(ascending=False))
-    print(f"\nDuplicate rows: {df.duplicated().sum()}")
-    print("\n--- NUMERICAL SUMMARY ---")
-    print(df.describe(include="all").transpose().to_string())
+    # 5. Correlation heatmap (matplotlib only, no extra plotting dependency)
+    corr = numeric.corr(numeric_only=True)
+    corr.to_csv(OUT_DIR / "numeric_correlation.csv")
+    if not corr.empty:
+        fig, ax = plt.subplots(figsize=(9, 7))
+        im = ax.imshow(corr, aspect="auto", vmin=-1, vmax=1)
+        ax.set_xticks(range(len(corr.columns)))
+        ax.set_yticks(range(len(corr.columns)))
+        ax.set_xticklabels(corr.columns, rotation=90, fontsize=8)
+        ax.set_yticklabels(corr.columns, fontsize=8)
+        ax.set_title("Correlation Heatmap of Numeric Variables")
+        fig.colorbar(im, ax=ax, shrink=0.8)
+        fig.tight_layout()
+        fig.savefig(OUT_DIR / "05_correlation_heatmap.png", dpi=160)
+        plt.close(fig)
 
-    if "Churn" in df.columns:
-        print("\n--- CHURN COUNTS ---")
-        print(df["Churn"].value_counts(dropna=False))
-        print("\n--- CHURN PERCENTAGES ---")
-        print((df["Churn"].value_counts(normalize=True, dropna=False) * 100).round(2))
+    # Churn rates by selected categorical variables.
+    for col in ["InternetService", "PaymentMethod", "SeniorCitizen", "TechSupport"]:
+        if col in df.columns:
+            pd.crosstab(df[col], df["Churn"], normalize="index").mul(100).to_csv(
+                OUT_DIR / f"churn_by_{col.lower()}_percent.csv"
+            )
 
-
-def analyze_outliers_iqr(df: pd.DataFrame, column: str = "MonthlyCharges") -> None:
-    """Report potential IQR outliers; do not automatically delete them."""
-    if column not in df.columns:
-        return
-    values = pd.to_numeric(df[column], errors="coerce").dropna()
-    q1, q3 = values.quantile([0.25, 0.75])
-    iqr = q3 - q1
-    lower, upper = q1 - 1.5 * iqr, q3 + 1.5 * iqr
-    count = int(((values < lower) | (values > upper)).sum())
-    print(f"\n--- IQR OUTLIER CHECK: {column} ---")
-    print(f"Lower bound: {lower:.2f}; upper bound: {upper:.2f}")
-    print(f"Potential outliers: {count}")
-    print("Potential outliers are reported, not removed automatically.")
-
-
-def main() -> int:
-    try:
-        raw = load_data(DATA_PATH)
-    except FileNotFoundError as exc:
-        print(exc)
-        return 1
-
-    print("--- RAW DATA QUALITY CHECK ---")
-    report_quality(raw)
-
-    cleaned = clean_data(raw)
-    print("\n--- CLEANED DATA QUALITY CHECK ---")
-    report_quality(cleaned)
-    analyze_outliers_iqr(cleaned)
-    make_visualizations(cleaned)
-
-    cleaned_path = OUTPUT_DIR / "cleaned_telco_data.csv"
-    cleaned.to_csv(cleaned_path, index=False)
-    print(f"\nCleaned dataset saved to: {cleaned_path}")
-    print("\nAnalysis complete.")
-    return 0
-
+    print("\\nChurn counts:")
+    print(churn_counts.to_string())
+    print("\\nAnalysis completed successfully.")
+    print("Cleaned data, tables, audit notes and charts are saved in:", OUT_DIR)
 
 if __name__ == "__main__":
-    sys.exit(main())
+    main()

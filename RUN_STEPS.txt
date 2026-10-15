@@ -1,0 +1,11 @@
+RUN THIS PROJECT (Windows / Anaconda)
+
+1. Extract the ZIP file.
+2. Open the extracted Telecom_Week2_Project folder.
+3. Make sure the CSV is inside the data folder. If not, the script will try to download it.
+4. Open Command Prompt/Anaconda Prompt in this folder.
+5. Run:
+   python -m pip install -r requirements.txt
+   python main.py
+6. Open outputs to see the charts and CSV files.
+7. Upload the DOCX report to Yuva Intern. Add the generated charts/results to the report if required by your evaluator.
